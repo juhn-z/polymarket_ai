@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: polypredict
+      POSTGRES_USER: polypredict
+      POSTGRES_PASSWORD: polypredict
+    ports:
+      - "5432:5432"
+    volumes:
+      - polypredict_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polypredict -d polypredict"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://polypredict:polypredict@postgres:5432/polypredict
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-change_me}
+      POLYMARKET_API_KEY: ${POLYMARKET_API_KEY:-}
+      POLYMARKET_API_SECRET: ${POLYMARKET_API_SECRET:-}
+      POLYMARKET_PASSPHRASE: ${POLYMARKET_PASSPHRASE:-}
+      CRYPTOPANIC_API_KEY: ${CRYPTOPANIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4}
+      POLYGON_RPC_URL: ${POLYGON_RPC_URL:-}
+      ADMIN_PRIVATE_KEY: ${ADMIN_PRIVATE_KEY:-}
+      VAULT_CONTRACT_ADDRESS: ${VAULT_CONTRACT_ADDRESS:-}
+      USDC_CONTRACT_ADDRESS: ${USDC_CONTRACT_ADDRESS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  polypredict_pgdata:

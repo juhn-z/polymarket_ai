@@ -41,9 +41,13 @@ from app.tasks.scheduler import register_jobs, safe
 async def lifespan(app: FastAPI):
     settings = get_settings()
     engine = make_engine(settings)
-    async with engine.begin() as conn:
-        # M0: create tables directly. M8 swaps to alembic-managed migrations.
-        await conn.run_sync(Base.metadata.create_all)
+
+    # Schema management: for sqlite we fall back to metadata.create_all()
+    # (fast test path). For Postgres/production, operators should run
+    # `alembic upgrade head` as a deployment step before the app boots.
+    if settings.database_url.startswith(("sqlite", "sqlite+aiosqlite")):
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     session_factory = make_session_factory(engine)
 
