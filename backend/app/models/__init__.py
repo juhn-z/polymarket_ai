@@ -3,6 +3,16 @@ from app.models.base import Base  # noqa: F401
 from app.models.market import MarketORM  # noqa: F401
 from app.models.prediction import PredictionORM  # noqa: F401
 from app.models.strategy import StrategyORM  # noqa: F401
+from app.models.system_log import SystemLogORM  # noqa: F401
 from app.models.trade import TradeORM  # noqa: F401
+from app.models.vault_snapshot import VaultSnapshotORM  # noqa: F401
 
-__all__ = ["Base", "MarketORM", "PredictionORM", "StrategyORM", "TradeORM"]
+__all__ = [
+    "Base",
+    "MarketORM",
+    "PredictionORM",
+    "StrategyORM",
+    "SystemLogORM",
+    "TradeORM",
+    "VaultSnapshotORM",
+]
