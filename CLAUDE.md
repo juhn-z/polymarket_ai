@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Layout
 
-This is a multi-component project for an AI-driven Polymarket prediction vault. Only the smart contract is currently implemented; backend and frontend exist as Chinese-language PRDs only.
+This is a multi-component project for an AI-driven Polymarket prediction vault.
 
-- `contracts/` — Hardhat + TypeScript Solidity project (the only code-bearing directory).
-- `docs/PRD-smart-contract.md` — spec the contract implements.
-- `docs/PRD-backend.md` — planned Python/FastAPI service (not yet built).
-- `docs/PRD-frontend.md` — planned Next.js dashboard (not yet built).
+- `contracts/` — Hardhat + TypeScript Solidity project (PolyVault ERC-4626 UUPS).
+- `backend/` — Python 3.12 / FastAPI service. Built via TDD across M0–M8; see `docs/superpowers/specs/2026-04-19-backend-v1-design.md` for the design and milestone breakdown.
+- `docs/PRD-smart-contract.md` — contract spec.
+- `docs/PRD-backend.md` — backend spec (incorporates the T+2 market selection rule).
+- `docs/PRD-frontend.md` — frontend spec (Next.js 14 dashboard, not yet built).
 
-When asked to "implement the backend" or "build the frontend," start from the corresponding PRD in `docs/`.
+When asked to "build the frontend," start from `docs/PRD-frontend.md`.
 
 ## Smart Contract (`contracts/`)
 
@@ -67,3 +68,42 @@ Uses `@openzeppelin/hardhat-upgrades` with `kind: "uups"`. When adding state, ap
 - Custom errors (not `require` strings) — see the `// ========== ERRORS ==========` block in `PolyVault.sol`.
 - `SafeERC20` for all token transfers; `ReentrancyGuardTransient` (transient-storage variant) on state-changing externals.
 - Section banner comments (`// ========== SECTION ==========`) are the existing style; preserve them.
+
+## Backend (`backend/`)
+
+Python 3.12 FastAPI single-process monolith. Package manager: `uv`. Run all commands from `backend/`.
+
+```bash
+cd backend
+uv sync                            # install deps (one-time)
+uv run pytest                      # 99 unit+integration tests (~15s)
+uv run pytest -m live              # 5 live smoke tests vs real external APIs (skipped by default)
+uv run uvicorn app.main:app        # boot dev server on :8000
+uv run alembic upgrade head        # apply migrations (Postgres deploys)
+docker-compose -f docker/docker-compose.yml up --build    # full stack w/ Postgres
+```
+
+### Architectural rules (enforced in tests)
+
+1. **Services depend only on Protocols, never on SQLAlchemy/httpx/web3 directly.** All 6 external clients (Polymarket Gamma/CLOB, Binance, alternative.me Fear & Greed, CryptoPanic, OpenAI, PolyVault chain) are defined in `app/adapters/protocols.py`. Every Protocol has a matching in-memory `Fake*` in `tests/fakes/` plus a real HTTP/web3 impl in `app/adapters/`. Adding a service that imports `httpx` directly breaks the test pipeline.
+
+2. **Pipeline: Scanner → Aggregator → Predictor → StrategyGenerator → TradeExecutor → PositionMonitor.** Each service has a single async entry method (`scan_today`, `collect_for`, `predict`, `generate`, `execute`/`close_position`, `check_once`). They're wired by APScheduler cron jobs in `app/tasks/scheduler.py` (registered in `app/main.py` lifespan).
+
+3. **Strategy generator is a pure synchronous function with three hard gates.** `abs(edge) >= 0.25` AND `confidence >= 0.6` AND AI's `recommended_action` must match the edge sign. Failing any gate produces a `Strategy(action="skip", status="skipped", skip_reason=...)` that's still persisted for audit.
+
+4. **Money precision: `Numeric(38, 18)` everywhere.** SQLite stores Numeric as REAL (test asserts use `abs(...) < Decimal("0.000001")` tolerance); Postgres round-trips exactly.
+
+5. **Pause flag lives in `system_logs` as a sentinel row** (`source='system.pause', message='paused'`). Every scheduled job checks `VaultService.is_paused()` before running. `POST /api/v1/system/{pause,resume}` toggle it.
+
+6. **Schema management:** sqlite (test/local) uses `Base.metadata.create_all` in the lifespan. Postgres/prod runs `alembic upgrade head` (the Dockerfile CMD does this automatically before uvicorn starts).
+
+### Testing conventions
+
+- `@pytest.mark.live` — real external API calls (Binance, Polymarket, Fear & Greed). Skipped by default via `pyproject.toml` `addopts = "-m 'not live'"`; run manually with `uv run pytest -m live`.
+- All DB-backed integration tests use sqlite `:memory:` + `StaticPool` so multiple connections share the same database within a test.
+- Inject `clock: Callable[[], datetime]` into services (`MarketScanner`, `PositionMonitor`, `VaultService`) for deterministic time-based tests.
+- `FastAPI dependency_overrides` wiring pattern: override at the provider level (e.g., `get_market_scanner`, `get_ai_predictor`) so the real dep chain still executes in tests.
+
+### 25% edge rule (`app/services/strategy_generator.py`)
+
+This is the project's core trading discipline. The system ONLY trades when the AI's predicted probability differs from the Polymarket Yes price by ≥ 25 percentage points AND the AI's confidence is ≥ 60%. Per PRD §3.4: small edges on an efficient market are noise, not alpha. Don't weaken this without discussing with the user first.
