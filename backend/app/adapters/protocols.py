@@ -1,7 +1,7 @@
 """Protocol interfaces for external services. Service code depends only on these."""
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.domain.binance import Kline, Ticker24h
 from app.domain.markets import GammaEvent, GammaMarket
@@ -26,3 +26,16 @@ class FearGreedClient(Protocol):
 
 class NewsClient(Protocol):
     async def get_btc_news(self, limit: int = 10) -> list[NewsItem]: ...
+
+
+class OpenAIClient(Protocol):
+    """Returns ``{"content": <json dict>, "tokens_used": int, "latency_ms": int}``."""
+    async def predict(
+        self,
+        *,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any],
+        seed: int,
+        model: str,
+    ) -> dict[str, Any]: ...
