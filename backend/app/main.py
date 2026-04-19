@@ -9,10 +9,13 @@ from app.adapters.binance import BinanceHttpClient
 from app.adapters.cryptopanic import CryptoPanicHttpClient
 from app.adapters.fear_greed import FearGreedHttpClient
 from app.adapters.openai_client import OpenAIHttpClient
+from app.adapters.polymarket_clob import PolymarketCLOBHttpClient
 from app.adapters.polymarket_gamma import PolymarketGammaHttpClient
+from app.adapters.vault_chain import VaultChainClient
 from app.api.v1 import markets as markets_router
 from app.api.v1 import predictions as predictions_router
 from app.api.v1 import strategies as strategies_router
+from app.api.v1 import trades as trades_router
 from app.config import get_settings
 from app.db import make_engine, make_session_factory
 from app.models import Base  # side-effect: registers all ORM tables
@@ -33,6 +36,12 @@ async def lifespan(app: FastAPI):
         base_url=settings.cryptopanic_api_url,
         api_key=settings.cryptopanic_api_key,
     )
+    clob = PolymarketCLOBHttpClient(
+        base_url=settings.polymarket_clob_api_url,
+        api_key=settings.polymarket_api_key,
+        api_secret=settings.polymarket_api_secret,
+        passphrase=settings.polymarket_passphrase,
+    )
 
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
@@ -40,6 +49,15 @@ async def lifespan(app: FastAPI):
     app.state.binance_client = binance
     app.state.fear_greed_client = fear_greed
     app.state.news_client = news
+    app.state.clob_client = clob
+    if settings.vault_contract_address and settings.polygon_rpc_url:
+        app.state.vault_client = VaultChainClient(
+            rpc_url=settings.polygon_rpc_url,
+            vault_address=settings.vault_contract_address,
+            admin_private_key=settings.admin_private_key,
+        )
+    else:
+        app.state.vault_client = _UnconfiguredVault()
     if settings.openai_api_key:
         app.state.openai_client = OpenAIHttpClient(api_key=settings.openai_api_key)
     else:
@@ -53,6 +71,7 @@ async def lifespan(app: FastAPI):
         await binance.aclose()
         await fear_greed.aclose()
         await news.aclose()
+        await clob.aclose()
         if isinstance(app.state.openai_client, OpenAIHttpClient):
             await app.state.openai_client.aclose()
         await engine.dispose()
@@ -65,10 +84,28 @@ class _UnconfiguredOpenAI:  # pragma: no cover - defensive runtime stub
         )
 
 
+class _UnconfiguredVault:  # pragma: no cover - defensive runtime stub
+    async def total_assets(self):
+        raise RuntimeError("VaultClient not configured; set VAULT_CONTRACT_ADDRESS and POLYGON_RPC_URL")
+
+    async def share_price(self):
+        raise RuntimeError("VaultClient not configured")
+
+    async def available_balance(self):
+        raise RuntimeError("VaultClient not configured")
+
+    async def withdraw_to_strategy(self, amount):
+        raise RuntimeError("VaultClient not configured")
+
+    async def deposit_from_strategy(self, amount):
+        raise RuntimeError("VaultClient not configured")
+
+
 app = FastAPI(title="PolyPredict AI Backend", lifespan=lifespan)
 app.include_router(markets_router.router, prefix="/api/v1")
 app.include_router(predictions_router.router, prefix="/api/v1")
 app.include_router(strategies_router.router, prefix="/api/v1")
+app.include_router(trades_router.router, prefix="/api/v1")
 
 
 @app.get("/health")

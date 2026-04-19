@@ -11,16 +11,20 @@ from app.adapters.protocols import (
     FearGreedClient,
     NewsClient,
     OpenAIClient,
+    PolymarketCLOBClient,
     PolymarketGammaClient,
+    VaultClient,
 )
 from app.config import Settings, get_settings
 from app.repositories.market_repository_sa import SqlAlchemyMarketRepository
 from app.repositories.prediction_repository_sa import SqlAlchemyPredictionRepository
 from app.repositories.strategy_repository_sa import SqlAlchemyStrategyRepository
+from app.repositories.trade_repository_sa import SqlAlchemyTradeRepository
 from app.services.ai_predictor import AIPredictor
 from app.services.data_aggregator import DataAggregator
 from app.services.market_scanner import MarketScanner
 from app.services.strategy_generator import StrategyGenerator
+from app.services.trade_executor import TradeExecutor
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -54,6 +58,14 @@ def get_openai_client(request: Request) -> OpenAIClient:
     return request.app.state.openai_client
 
 
+def get_clob_client(request: Request) -> PolymarketCLOBClient:
+    return request.app.state.clob_client
+
+
+def get_vault_client(request: Request) -> VaultClient:
+    return request.app.state.vault_client
+
+
 def get_market_repo(
     session: AsyncSession = Depends(get_session),
 ) -> SqlAlchemyMarketRepository:
@@ -70,6 +82,23 @@ def get_strategy_repo(
     session: AsyncSession = Depends(get_session),
 ) -> SqlAlchemyStrategyRepository:
     return SqlAlchemyStrategyRepository(session)
+
+
+def get_trade_repo(
+    session: AsyncSession = Depends(get_session),
+) -> SqlAlchemyTradeRepository:
+    return SqlAlchemyTradeRepository(session)
+
+
+def get_trade_executor(
+    clob: PolymarketCLOBClient = Depends(get_clob_client),
+    vault: VaultClient = Depends(get_vault_client),
+    strategy_repo: SqlAlchemyStrategyRepository = Depends(get_strategy_repo),
+    trade_repo: SqlAlchemyTradeRepository = Depends(get_trade_repo),
+) -> TradeExecutor:
+    return TradeExecutor(
+        clob=clob, vault=vault, strategy_repo=strategy_repo, trade_repo=trade_repo,
+    )
 
 
 def get_strategy_generator(
@@ -112,12 +141,16 @@ __all__ = [
     "get_fear_greed_client",
     "get_news_client",
     "get_openai_client",
+    "get_clob_client",
+    "get_vault_client",
     "get_market_repo",
     "get_prediction_repo",
     "get_strategy_repo",
+    "get_trade_repo",
     "get_market_scanner",
     "get_data_aggregator",
     "get_ai_predictor",
     "get_strategy_generator",
+    "get_trade_executor",
     "get_settings",
 ]
