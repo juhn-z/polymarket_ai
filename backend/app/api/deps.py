@@ -16,9 +16,11 @@ from app.adapters.protocols import (
 from app.config import Settings, get_settings
 from app.repositories.market_repository_sa import SqlAlchemyMarketRepository
 from app.repositories.prediction_repository_sa import SqlAlchemyPredictionRepository
+from app.repositories.strategy_repository_sa import SqlAlchemyStrategyRepository
 from app.services.ai_predictor import AIPredictor
 from app.services.data_aggregator import DataAggregator
 from app.services.market_scanner import MarketScanner
+from app.services.strategy_generator import StrategyGenerator
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -64,6 +66,23 @@ def get_prediction_repo(
     return SqlAlchemyPredictionRepository(session)
 
 
+def get_strategy_repo(
+    session: AsyncSession = Depends(get_session),
+) -> SqlAlchemyStrategyRepository:
+    return SqlAlchemyStrategyRepository(session)
+
+
+def get_strategy_generator(
+    settings: Settings = Depends(get_settings),
+) -> StrategyGenerator:
+    # NOTE: vault balance is mocked to a sensible default until the VaultClient
+    # adapter lands in M5. Until then, StrategyGenerator uses a static balance
+    # for sizing math — the Trade Executor will pull the live balance when it
+    # actually withdraws from the vault.
+    from decimal import Decimal
+    return StrategyGenerator(vault_balance=Decimal("100000"))
+
+
 def get_market_scanner(
     gamma: PolymarketGammaClient = Depends(get_gamma_client),
     repo: SqlAlchemyMarketRepository = Depends(get_market_repo),
@@ -95,8 +114,10 @@ __all__ = [
     "get_openai_client",
     "get_market_repo",
     "get_prediction_repo",
+    "get_strategy_repo",
     "get_market_scanner",
     "get_data_aggregator",
     "get_ai_predictor",
+    "get_strategy_generator",
     "get_settings",
 ]

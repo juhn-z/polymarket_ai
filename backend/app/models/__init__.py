@@ -2,5 +2,6 @@
 from app.models.base import Base  # noqa: F401
 from app.models.market import MarketORM  # noqa: F401
 from app.models.prediction import PredictionORM  # noqa: F401
+from app.models.strategy import StrategyORM  # noqa: F401
 
-__all__ = ["Base", "MarketORM", "PredictionORM"]
+__all__ = ["Base", "MarketORM", "PredictionORM", "StrategyORM"]

@@ -12,6 +12,7 @@ from app.adapters.openai_client import OpenAIHttpClient
 from app.adapters.polymarket_gamma import PolymarketGammaHttpClient
 from app.api.v1 import markets as markets_router
 from app.api.v1 import predictions as predictions_router
+from app.api.v1 import strategies as strategies_router
 from app.config import get_settings
 from app.db import make_engine, make_session_factory
 from app.models import Base  # side-effect: registers all ORM tables
@@ -67,6 +68,7 @@ class _UnconfiguredOpenAI:  # pragma: no cover - defensive runtime stub
 app = FastAPI(title="PolyPredict AI Backend", lifespan=lifespan)
 app.include_router(markets_router.router, prefix="/api/v1")
 app.include_router(predictions_router.router, prefix="/api/v1")
+app.include_router(strategies_router.router, prefix="/api/v1")
 
 
 @app.get("/health")
