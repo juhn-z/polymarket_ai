@@ -19,6 +19,7 @@ class MarketResponse(BaseModel):
     event_slug: str
     question: str
     price_threshold: int
+    scan_date: date
     target_date: date
     current_yes_price: Decimal
     current_no_price: Decimal
@@ -37,6 +38,7 @@ class MarketResponse(BaseModel):
             event_slug=market.event_slug,
             question=market.question,
             price_threshold=market.price_threshold,
+            scan_date=market.scan_date,
             target_date=market.target_date,
             current_yes_price=market.current_yes_price,
             current_no_price=market.current_no_price,

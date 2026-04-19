@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -11,15 +11,22 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.adapters.protocols import PolymarketGammaClient
-from app.api.deps import get_gamma_client, get_session
+from app.api.deps import get_gamma_client, get_market_scanner, get_session
 from app.config import Settings, get_settings
 from app.domain.markets import GammaEvent, GammaMarket, Market
 from app.main import app
 from app.models.base import Base
 from app.repositories.market_repository_sa import SqlAlchemyMarketRepository
+from app.services.market_scanner import MarketScanner
 from tests.fakes.fake_polymarket_gamma import FakePolymarketGammaClient
 
 ADMIN_KEY = "test-admin-key"
+SCAN_AT = datetime(2026, 4, 5, 0, 0, tzinfo=timezone.utc)
+TARGET_DATE = SCAN_AT.date() + timedelta(days=2)
+
+
+def _fixed_clock() -> datetime:
+    return SCAN_AT
 
 
 @pytest.fixture
@@ -48,8 +55,8 @@ def fake_gamma() -> FakePolymarketGammaClient:
         events=[
             GammaEvent(
                 id="evt-1",
-                slug="bitcoin-above-april-6",
-                title="Bitcoin above 66000 on April 6",
+                slug="bitcoin-above-april-7",
+                title="Bitcoin above 66000 on April 7",
                 active=True,
             ),
         ],
@@ -59,12 +66,12 @@ def fake_gamma() -> FakePolymarketGammaClient:
                     condition_id="0xchosen",
                     yes_token_id="yes-0xchosen",
                     no_token_id="no-0xchosen",
-                    question="Bitcoin above 66000 on April 6?",
+                    question="Bitcoin above 66000 on April 7?",
                     price_threshold=66000,
-                    target_date=date(2026, 4, 6),
+                    target_date=TARGET_DATE,
                     yes_price=Decimal("0.50"),
                     no_price=Decimal("0.50"),
-                    volume_24h=Decimal("12345"),
+                    volume_24h=Decimal("50000"),
                 ),
             ],
         },
@@ -73,6 +80,8 @@ def fake_gamma() -> FakePolymarketGammaClient:
 
 @pytest.fixture
 def client(session_factory, fake_gamma) -> Iterator[TestClient]:
+    from fastapi import Depends
+
     async def _get_session() -> AsyncIterator[AsyncSession]:
         async with session_factory() as s:
             try:
@@ -88,9 +97,19 @@ def client(session_factory, fake_gamma) -> Iterator[TestClient]:
     def _get_settings() -> Settings:
         return Settings(admin_api_key=ADMIN_KEY)
 
+    async def _get_scanner(
+        session: AsyncSession = Depends(_get_session),
+    ) -> MarketScanner:
+        return MarketScanner(
+            gamma=fake_gamma,
+            repo=SqlAlchemyMarketRepository(session),
+            clock=_fixed_clock,
+        )
+
     app.dependency_overrides[get_session] = _get_session
     app.dependency_overrides[get_gamma_client] = _get_gamma
     app.dependency_overrides[get_settings] = _get_settings
+    app.dependency_overrides[get_market_scanner] = _get_scanner
     try:
         with TestClient(app) as c:
             yield c
@@ -127,8 +146,9 @@ class TestMarketsEndpoints:
         assert body["polymarket_condition_id"] == "0xchosen"
         assert body["price_threshold"] == 66000
         assert body["status"] == "active"
+        assert body["scan_date"] == SCAN_AT.date().isoformat()
+        assert body["target_date"] == TARGET_DATE.isoformat()
         assert "id" in body
-        # gamma client should have been called once for events + once for markets
         assert fake_gamma.search_calls == ["bitcoin"]
         assert fake_gamma.market_calls == ["evt-1"]
 
@@ -153,10 +173,11 @@ class TestMarketsEndpoints:
                     event_slug="rt",
                     question="Bitcoin above 1?",
                     price_threshold=1,
-                    target_date=date(2026, 4, 19),
+                    scan_date=date(2026, 4, 5),
+                    target_date=date(2026, 4, 7),
                     current_yes_price=Decimal("0.5"),
                     current_no_price=Decimal("0.5"),
-                    selected_at=datetime(2026, 4, 19, 12, 0, tzinfo=timezone.utc),
+                    selected_at=datetime(2026, 4, 5, 12, 0, tzinfo=timezone.utc),
                 ),
             )
             await session.commit()
@@ -165,4 +186,5 @@ class TestMarketsEndpoints:
             fetched = await repo.get_by_condition_id("0xrt")
             assert fetched is not None
             assert fetched.id == saved.id
-            assert fetched.question == "Bitcoin above 1?"
+            assert fetched.scan_date == date(2026, 4, 5)
+            assert fetched.target_date == date(2026, 4, 7)

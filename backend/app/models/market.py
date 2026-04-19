@@ -19,6 +19,7 @@ class MarketORM(Base, TimestampMixin):
     event_slug: Mapped[str] = mapped_column(String(255), nullable=False)
     question: Mapped[str] = mapped_column(String(500), nullable=False)
     price_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+    scan_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
     target_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     current_yes_price: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
     current_no_price: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)

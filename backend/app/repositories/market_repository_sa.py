@@ -22,6 +22,7 @@ class SqlAlchemyMarketRepository:
                 event_slug=market.event_slug,
                 question=market.question,
                 price_threshold=market.price_threshold,
+                scan_date=market.scan_date,
                 target_date=market.target_date,
                 current_yes_price=market.current_yes_price,
                 current_no_price=market.current_no_price,
@@ -48,10 +49,10 @@ class SqlAlchemyMarketRepository:
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return _to_domain(row) if row else None
 
-    async def get_latest_for_date(self, target: date) -> Market | None:
+    async def get_by_scan_date(self, scan_date: date) -> Market | None:
         stmt = (
             select(MarketORM)
-            .where(MarketORM.target_date == target)
+            .where(MarketORM.scan_date == scan_date)
             .order_by(MarketORM.selected_at.desc())
             .limit(1)
         )
@@ -77,6 +78,7 @@ def _to_domain(row: MarketORM) -> Market:
         event_slug=row.event_slug,
         question=row.question,
         price_threshold=row.price_threshold,
+        scan_date=row.scan_date,
         target_date=row.target_date,
         current_yes_price=row.current_yes_price,
         current_no_price=row.current_no_price,

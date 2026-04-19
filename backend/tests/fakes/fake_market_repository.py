@@ -27,8 +27,8 @@ class FakeMarketRepository:
                 return m
         return None
 
-    async def get_latest_for_date(self, target: date) -> Market | None:
-        matches = [m for m in self._by_id.values() if m.target_date == target]
+    async def get_by_scan_date(self, scan_date: date) -> Market | None:
+        matches = [m for m in self._by_id.values() if m.scan_date == scan_date]
         if not matches:
             return None
         return max(matches, key=lambda m: m.selected_at)

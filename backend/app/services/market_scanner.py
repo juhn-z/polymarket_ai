@@ -1,8 +1,9 @@
-"""Daily Polymarket BTC market scanner."""
+"""Daily Polymarket BTC market scanner (PRD §3.1)."""
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.adapters.protocols import PolymarketGammaClient
@@ -11,42 +12,67 @@ from app.repositories.market_repository import MarketRepository
 
 _MIN_PROBABILITY = Decimal("0.35")
 _MAX_PROBABILITY = Decimal("0.65")
+_MIN_VOLUME_24H = Decimal("10000")
+_TARGET_OFFSET = timedelta(days=2)
 _BTC_ABOVE_PATTERN = re.compile(r"bitcoin\s+above", re.IGNORECASE)
 _BITCOIN_TAG = "bitcoin"
+_MIDPOINT = Decimal("0.5")
+
+Clock = Callable[[], datetime]
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class MarketScanner:
     """Selects the best Polymarket BTC prediction market for AI trading.
 
-    Strategy: among active "Bitcoin above ___" events, choose the market
-    whose Yes price sits inside [0.35, 0.65] (highest informational value)
-    and has the largest 24h volume (best liquidity for execution).
+    Selection rules (PRD §3.1):
+      1. target_date = scan_date + 2 days
+      2. Event must be active and title contains "Bitcoin above"
+      3. Market's own target_date must equal scan_date + 2
+      4. Yes price ∈ [0.35, 0.65]
+      5. 24h volume ≥ $10,000
+      6. Sort: primary = |yes_price − 0.5| ascending (closest to 50% first)
+               secondary = volume descending
 
-    Persistence is idempotent: re-running on the same `target_date` returns
-    the previously-saved Market instead of inserting a duplicate.
+    Idempotency: at most one Market row per scan_date. Re-runs on the same
+    UTC day return the existing record.
     """
 
-    def __init__(self, gamma: PolymarketGammaClient, repo: MarketRepository) -> None:
+    def __init__(
+        self,
+        gamma: PolymarketGammaClient,
+        repo: MarketRepository,
+        clock: Clock = _utc_now,
+    ) -> None:
         self._gamma = gamma
         self._repo = repo
+        self._clock = clock
 
     async def scan_today(self) -> Market | None:
-        chosen, event = await self._select_best()
+        now = self._clock()
+        scan_date = now.date()
+        target_date = scan_date + _TARGET_OFFSET
+
+        existing = await self._repo.get_by_scan_date(scan_date)
+        if existing is not None:
+            return existing
+
+        chosen, event = await self._select_best(target_date=target_date)
         if chosen is None or event is None:
             return None
-
-        existing = await self._repo.get_latest_for_date(chosen.target_date)
-        if existing is not None and existing.polymarket_condition_id == chosen.condition_id:
-            return existing
 
         market = Market.from_gamma(
             chosen,
             event_slug=event.slug,
-            selected_at=datetime.now(timezone.utc),
+            scan_date=scan_date,
+            selected_at=now,
         )
         return await self._repo.save(market)
 
-    async def _select_best(self) -> tuple[GammaMarket | None, GammaEvent | None]:
+    async def _select_best(self, *, target_date) -> tuple[GammaMarket | None, GammaEvent | None]:
         events = await self._gamma.search_events(tag=_BITCOIN_TAG)
         candidates: list[tuple[GammaMarket, GammaEvent]] = []
         for event in events:
@@ -54,12 +80,13 @@ class MarketScanner:
                 continue
             markets = await self._gamma.get_event_markets(event.id)
             for m in markets:
-                if self._is_in_band(m):
+                if self._is_eligible_market(m, target_date=target_date):
                     candidates.append((m, event))
 
         if not candidates:
             return None, None
-        best_market, best_event = max(candidates, key=lambda pair: pair[0].volume_24h)
+
+        best_market, best_event = min(candidates, key=_sort_key)
         return best_market, best_event
 
     @staticmethod
@@ -67,5 +94,16 @@ class MarketScanner:
         return event.active and bool(_BTC_ABOVE_PATTERN.search(event.title))
 
     @staticmethod
-    def _is_in_band(market: GammaMarket) -> bool:
-        return _MIN_PROBABILITY <= market.yes_price <= _MAX_PROBABILITY
+    def _is_eligible_market(market: GammaMarket, *, target_date) -> bool:
+        return (
+            market.target_date == target_date
+            and _MIN_PROBABILITY <= market.yes_price <= _MAX_PROBABILITY
+            and market.volume_24h >= _MIN_VOLUME_24H
+        )
+
+
+def _sort_key(pair: tuple[GammaMarket, GammaEvent]) -> tuple[Decimal, Decimal]:
+    market, _event = pair
+    distance_from_midpoint = abs(market.yes_price - _MIDPOINT)
+    # Negate volume so that min() treats higher volume as better (secondary key).
+    return (distance_from_midpoint, -market.volume_24h)
