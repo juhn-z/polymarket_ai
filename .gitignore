@@ -1,0 +1,30 @@
+# Editor
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+backend/polypredict.db
+
+# Local env
+**/.env
+**/.env.local
+!**/.env.example
+!**/.env.local.example
+
+# Build artifacts
+**/.next/
+**/dist/
+**/coverage/
+playwright-report/
+test-results/
