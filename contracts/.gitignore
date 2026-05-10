@@ -5,3 +5,5 @@ coverage
 coverage.json
 typechain-types
 .env
+# generated address book; ABI/ folder is committed
+exports/localhost.json
