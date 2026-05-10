@@ -181,3 +181,26 @@ class TestDataAggregator:
         assert bundle.rsi_14 is None
         assert bundle.macd is None
         assert bundle.bollinger is None
+
+
+class _RaisingNews:
+    async def get_btc_news(self, limit: int = 10):
+        raise RuntimeError("simulated CryptoPanic outage")
+
+
+@pytest.mark.asyncio
+async def test_aggregator_returns_empty_news_when_news_client_raises() -> None:
+    """News is best-effort; a 5xx or schema drift must NOT kill prediction."""
+    agg, *_ = _aggregator()
+    # Replace the FakeNewsClient with one that always raises.
+    aggregator = DataAggregator(
+        binance=agg._binance,
+        fear_greed=agg._fear_greed,
+        news=_RaisingNews(),
+    )
+    bundle = await aggregator.collect_for(_market())
+
+    assert bundle.news_headlines == []
+    # Other fields must still be populated from binance + fear_greed
+    assert bundle.btc_current_price > 0
+    assert bundle.fear_greed_index is not None

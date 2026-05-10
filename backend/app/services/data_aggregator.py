@@ -71,7 +71,13 @@ class DataAggregator:
         klines_1d = await self._binance.get_klines(BTC_SYMBOL, INTERVAL_1D, KLINE_LIMIT_1D)
         ticker = await self._binance.get_24h_ticker(BTC_SYMBOL)
         fng_points = await self._fear_greed.get_index(days=FNG_DAYS)
-        news_items = await self._news.get_btc_news(limit=NEWS_LIMIT)
+        try:
+            news_items = await self._news.get_btc_news(limit=NEWS_LIMIT)
+        except Exception:
+            # News is optional. CryptoPanic outages, missing keys, or schema
+            # drift should not block the daily prediction (PRD §3.2.4 — news
+            # is best-effort context, not a hard input).
+            news_items = []
 
         indicators = compute_indicators(klines_1h)
 
