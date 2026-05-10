@@ -279,10 +279,13 @@ class _UnconfiguredVault:  # pragma: no cover - defensive runtime stub
 
 app = FastAPI(title="PolyPredict AI Backend", lifespan=lifespan)
 
-_settings_for_cors = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _settings_for_cors.cors_allow_origins.split(",") if o.strip()],
+    allow_origins=[
+        o.strip()
+        for o in get_settings().cors_allow_origins.split(",")
+        if o.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

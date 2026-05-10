@@ -1,6 +1,7 @@
 """Aggregate multi-source market data for AI prediction input."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, time, timezone
 from decimal import Decimal
@@ -15,6 +16,8 @@ from app.utils.indicators import (
     MacdValues,
     compute_indicators,
 )
+
+_log = logging.getLogger(__name__)
 
 BTC_SYMBOL = "BTCUSDT"
 INTERVAL_1H = "1h"
@@ -77,6 +80,7 @@ class DataAggregator:
             # News is optional. CryptoPanic outages, missing keys, or schema
             # drift should not block the daily prediction (PRD §3.2.4 — news
             # is best-effort context, not a hard input).
+            _log.warning("news fetch failed, continuing without headlines", exc_info=True)
             news_items = []
 
         indicators = compute_indicators(klines_1h)

@@ -184,20 +184,16 @@ class TestDataAggregator:
 
 
 class _RaisingNews:
-    async def get_btc_news(self, limit: int = 10):
+    async def get_btc_news(self, limit: int = 10) -> list[NewsItem]:
         raise RuntimeError("simulated CryptoPanic outage")
 
 
 @pytest.mark.asyncio
 async def test_aggregator_returns_empty_news_when_news_client_raises() -> None:
-    """News is best-effort; a 5xx or schema drift must NOT kill prediction."""
-    agg, *_ = _aggregator()
-    # Replace the FakeNewsClient with one that always raises.
-    aggregator = DataAggregator(
-        binance=agg._binance,
-        fear_greed=agg._fear_greed,
-        news=_RaisingNews(),
-    )
+    """News is best-effort; a 5xx or schema drift must NOT kill prediction (PRD §3.2.4)."""
+    _, binance, fng_client, _news_client = _aggregator()
+    aggregator = DataAggregator(binance=binance, fear_greed=fng_client, news=_RaisingNews())
+
     bundle = await aggregator.collect_for(_market())
 
     assert bundle.news_headlines == []
