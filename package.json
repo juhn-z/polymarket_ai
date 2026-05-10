@@ -1,0 +1,18 @@
+{
+  "name": "polymarket-ai-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Orchestration scripts for the full PolyPredict stack",
+  "scripts": {
+    "dev:chain": "cd contracts && npm run node",
+    "dev:deploy": "cd contracts && npm run deploy:local-full",
+    "dev:abi": "cd contracts && npm run export:abi && cp exports/abi/*.json ../frontend/src/lib/abi/",
+    "dev:backend": "cd backend && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:frontend": "cd frontend && pnpm dev",
+    "dev:all": "concurrently -n chain,backend,frontend -c blue,green,magenta \"npm:dev:chain\" \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "seed": "bash scripts/seed-demo.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
