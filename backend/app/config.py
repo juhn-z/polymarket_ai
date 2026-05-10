@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     vault_contract_address: str = ""
     usdc_contract_address: str = ""
 
+    cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
     log_level: str = "INFO"
 
 

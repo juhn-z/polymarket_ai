@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.binance import BinanceHttpClient
 from app.adapters.cryptopanic import CryptoPanicHttpClient
@@ -277,6 +278,16 @@ class _UnconfiguredVault:  # pragma: no cover - defensive runtime stub
 
 
 app = FastAPI(title="PolyPredict AI Backend", lifespan=lifespan)
+
+_settings_for_cors = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in _settings_for_cors.cors_allow_origins.split(",") if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(markets_router.router, prefix="/api/v1")
 app.include_router(predictions_router.router, prefix="/api/v1")
 app.include_router(strategies_router.router, prefix="/api/v1")
