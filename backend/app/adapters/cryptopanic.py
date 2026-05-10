@@ -28,6 +28,12 @@ class CryptoPanicHttpClient:
             await self._client.aclose()
 
     async def get_btc_news(self, limit: int = 10) -> list[NewsItem]:
+        # Graceful no-op when no API key is configured (demo / cost-free path).
+        # The data aggregator treats an empty news list as "no news signal"
+        # rather than an error, per PRD-backend §3.2.4 (news is optional input).
+        if not self._api_key:
+            return []
+
         response = await self._client.get(
             f"{self._base_url}posts/",
             params={
