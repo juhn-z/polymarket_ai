@@ -306,39 +306,96 @@ POST /api/v1/system/pause            # 管理员暂停交易
 
 ## 快速开始
 
-目前只有 `contracts/` 子项目可运行。
+完整三层栈本地一键启动。
 
-### 智能合约
+### 前置依赖
+
+| 工具 | 版本 |
+|---|---|
+| Node.js | ≥ 20 |
+| pnpm | ≥ 9 (`npm i -g pnpm@9`) |
+| Python | 3.12 |
+| uv | latest (`pip install uv`) |
+| MetaMask | 浏览器插件 |
+
+### 一键启动（推荐）
 
 ```bash
-cd contracts
-npm install
+# 1. 安装依赖
+cd contracts && npm install && cd ..
+cd backend && uv sync && cd ..
+cd frontend && pnpm install && cd ..
 
-# 编译并生成 typechain
-npm run compile
+# 2. 启动全栈（Hardhat 链 + 后端 + 前端）
+./scripts/dev.sh
 
-# 运行测试
-npm test
-npm run test:coverage
-
-# 本地开发节点
-npm run node
-# 在另一个终端：
-npm run deploy:local
+# 3. 在另一个终端：种子数据（让仪表板有可视内容）
+./scripts/seed-demo.sh
 ```
 
-### 环境变量（`contracts/.env`）
+启动后：
+- Hardhat 链：`http://localhost:8545`（chainId 31337）
+- 后端：`http://localhost:8000`（OpenAPI: `/docs`）
+- 前端：`http://localhost:3000`
+
+`scripts/dev.sh` 自动完成：
+1. 启动 Hardhat node
+2. 部署 `MockUSDC` + `PolyVault`(UUPS proxy)，给前 5 个测试账户各 mint 1,000,000 USDC
+3. 把 ABI 拷贝到 `frontend/src/lib/abi/`
+4. 把合约地址写入 `backend/.env` 和 `frontend/.env.local`
+5. 启动 backend + frontend
+
+### MetaMask 配置
+
+1. 添加自定义网络：
+   - Name: `Hardhat Localhost`
+   - RPC URL: `http://127.0.0.1:8545`
+   - Chain ID: `31337`
+   - Symbol: `ETH`
+2. 导入 Hardhat 默认账号（私钥见 hardhat node 启动日志），账户 #0 既是金库管理员，#1-4 各持有 1,000,000 测试 USDC，可用于演示存款。
+
+### 三个独立终端启动（替代方案）
+
+如果想分别看日志：
+
+```bash
+# Terminal 1
+cd contracts && npm run node
+
+# Terminal 2 (等 #1 起来后)
+cd contracts && npm run deploy:local-full
+cd contracts && npm run export:abi
+cp contracts/exports/abi/*.json frontend/src/lib/abi/
+
+# Terminal 3
+cd backend && uv run uvicorn app.main:app --reload
+
+# Terminal 4
+cd frontend && pnpm dev
+```
+
+### 演示流程
+
+1. 浏览器打开 `http://localhost:3000`
+2. 顶部点 **Connect Wallet** → MetaMask → 选 Hardhat Localhost
+3. 进 `/vault` → 输入 100 → **Approve USDC** → **Deposit**
+4. 进 `/admin` → 顺序点 *Scan market* → *Predict* → *Generate strategy* → *Execute trade*
+5. 回 `/`（Dashboard）查看 TVL、AI 预测、近期交易
+6. 进 `/vault` → 申请取款 → 等 24h（或直接管理员加速：用 `cast rpc evm_increaseTime 86400 && cast rpc evm_mine` 跨过延迟期）→ **Execute**
+
+### 必填 API Keys
+
+只有这两个 key 是必需的，其余服务已自动降级：
 
 ```env
-PRIVATE_KEY=部署账户私钥
-POLYGON_RPC_URL=https://polygon-mainnet.g.alchemy.com/v2/your_key
-AMOY_RPC_URL=https://rpc-amoy.polygon.technology
-POLYGONSCAN_API_KEY=用于合约验证
+# backend/.env
+OPENAI_API_KEY=sk-...
+POLYMARKET_API_KEY=...
+POLYMARKET_API_SECRET=...
+POLYMARKET_PASSPHRASE=...
 ```
 
-### 后端 / 前端
-
-待实现。请参考 `docs/PRD-backend.md` 和 `docs/PRD-frontend.md` 中的目录结构与配置文件示例。
+未配 `CRYPTOPANIC_API_KEY` 时新闻列表为空（PRD §3.2.4 — news 是可选输入）。Binance 和 Fear&Greed 是公开 API，无需 key。
 
 ---
 
@@ -370,9 +427,9 @@ VAULT_PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-vault.ts --network pol
 | 阶段 | 状态 | 内容 |
 |------|------|------|
 | Phase 1 | ✅ 已完成 | PolyVault 合约 + 单元测试 |
-| Phase 2 | 🚧 进行中 | Polygon Amoy 测试网部署与端到端验证 |
-| Phase 3 | ⏳ 待启动 | 后端 FastAPI 服务（按 PRD-backend）|
-| Phase 4 | ⏳ 待启动 | 前端 Next.js 仪表板（按 PRD-frontend）|
+| Phase 2 | ✅ 已完成 | 后端 FastAPI 服务（M0-M8 全部完成）|
+| Phase 3 | ✅ 已完成 | 前端 Next.js 14 仪表板 + 本地一键演示 |
+| Phase 4 | ⏳ 待启动 | Polygon Amoy 测试网部署与端到端验证 |
 | Phase 5 | ⏳ 待启动 | Polygon 主网部署 + 公开 Beta |
 
 ---
