@@ -1,6 +1,8 @@
 """Unit tests for OpenAIHttpClient (direct HTTP, respx-mocked)."""
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -51,7 +53,6 @@ async def test_predict_posts_structured_output_request(client: OpenAIHttpClient)
 
     assert route.called
     req_body = route.calls.last.request.content
-    import json
     req = json.loads(req_body)
 
     assert req["model"] == "gpt-5.4"
@@ -67,6 +68,57 @@ async def test_predict_posts_structured_output_request(client: OpenAIHttpClient)
     assert result["content"] == {"answer": "42"}
     assert result["tokens_used"] == 321
     assert result["latency_ms"] >= 0
+
+
+@respx.mock
+async def test_predict_uses_gpt5_compatible_params(client: OpenAIHttpClient) -> None:
+    """GPT-5.x reject `top_p` and `max_tokens` — request must use
+    `max_completion_tokens` and omit `top_p` (verified live against gpt-5.5)."""
+    route = respx.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"answer": "ok"}', "role": "assistant"}}],
+                "usage": {"total_tokens": 3},
+            },
+        )
+    )
+
+    await client.predict(
+        system="sys", user="usr", response_schema=_SCHEMA, seed=3, model="gpt-5.5"
+    )
+
+    body = json.loads(route.calls.last.request.content)
+    assert "max_completion_tokens" in body
+    assert "max_tokens" not in body
+    assert "top_p" not in body
+
+
+@respx.mock
+async def test_predict_uses_custom_base_url_for_openai_compatible_proxy() -> None:
+    """An OpenAI-compatible proxy (e.g. AIHubMix) works by changing only base_url."""
+    route = respx.post("https://aihubmix.com/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"answer": "42"}', "role": "assistant"}}],
+                "usage": {"total_tokens": 11},
+            },
+        )
+    )
+
+    proxy_client = OpenAIHttpClient(api_key="sk-proxy", base_url="https://aihubmix.com/v1")
+    try:
+        result = await proxy_client.predict(
+            system="sys", user="usr", response_schema=_SCHEMA, seed=1, model="gpt-5.5"
+        )
+    finally:
+        await proxy_client.aclose()
+
+    assert route.called
+    assert json.loads(route.calls.last.request.content)["model"] == "gpt-5.5"
+    assert route.calls.last.request.headers["authorization"] == "Bearer sk-proxy"
+    assert result["content"] == {"answer": "42"}
 
 
 @respx.mock

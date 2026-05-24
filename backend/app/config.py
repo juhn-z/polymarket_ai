@@ -30,6 +30,9 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     openai_model: str = "gpt-5.4"
+    # OpenAI-compatible base URL. Override to use a proxy such as AIHubMix
+    # (https://aihubmix.com/v1) without touching the adapter code.
+    openai_base_url: str = "https://api.openai.com/v1"
 
     polygon_rpc_url: str = ""
     admin_private_key: str = ""

@@ -130,8 +130,9 @@ def get_data_aggregator(
 def get_ai_predictor(
     openai: OpenAIClient = Depends(get_openai_client),
     repo: SqlAlchemyPredictionRepository = Depends(get_prediction_repo),
+    settings: Settings = Depends(get_settings),
 ) -> AIPredictor:
-    return AIPredictor(openai=openai, repo=repo)
+    return AIPredictor(openai=openai, repo=repo, model=settings.openai_model)
 
 
 __all__ = [

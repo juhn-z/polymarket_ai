@@ -75,7 +75,10 @@ async def lifespan(app: FastAPI):
         else _UnconfiguredVault()
     )
     openai = (
-        OpenAIHttpClient(api_key=settings.openai_api_key)
+        OpenAIHttpClient(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
         if settings.openai_api_key
         else _UnconfiguredOpenAI()
     )
@@ -135,7 +138,9 @@ async def lifespan(app: FastAPI):
                 binance=binance, fear_greed=fear_greed, news=news
             ).collect_for(market)
             predictor = AIPredictor(
-                openai=openai, repo=SqlAlchemyPredictionRepository(session)
+                openai=openai,
+                repo=SqlAlchemyPredictionRepository(session),
+                model=settings.openai_model,
             )
             await predictor.predict(market, bundle)
             await session.commit()

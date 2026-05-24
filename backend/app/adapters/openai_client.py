@@ -15,7 +15,6 @@ import httpx
 _CHAT_PATH = "/chat/completions"
 _DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_TEMPERATURE = 0.2
-_DEFAULT_TOP_P = 0.9
 _DEFAULT_MAX_TOKENS = 4096
 _SCHEMA_NAME = "prediction"
 
@@ -29,7 +28,6 @@ class OpenAIHttpClient:
         client: httpx.AsyncClient | None = None,
         timeout: float = _DEFAULT_TIMEOUT_SECONDS,
         temperature: float = _DEFAULT_TEMPERATURE,
-        top_p: float = _DEFAULT_TOP_P,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
     ) -> None:
         self._api_key = api_key
@@ -37,7 +35,6 @@ class OpenAIHttpClient:
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(timeout=timeout)
         self._temperature = temperature
-        self._top_p = top_p
         self._max_tokens = max_tokens
 
     async def aclose(self) -> None:
@@ -68,8 +65,9 @@ class OpenAIHttpClient:
                 },
             },
             "temperature": self._temperature,
-            "top_p": self._top_p,
-            "max_tokens": self._max_tokens,
+            # GPT-5.x reject `top_p` and require `max_completion_tokens`
+            # (not `max_tokens`). Both are accepted by current OpenAI models too.
+            "max_completion_tokens": self._max_tokens,
             "seed": seed,
         }
 
