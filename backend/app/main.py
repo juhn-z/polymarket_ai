@@ -166,7 +166,7 @@ async def lifespan(app: FastAPI):
                 balance = Decimal("0")
             if balance <= 0:
                 balance = Decimal("100000")  # documented default
-            gen = StrategyGenerator(vault_balance=balance)
+            gen = StrategyGenerator(vault_balance=balance, min_edge=settings.min_edge)
             strategy = gen.generate(prediction=prediction, market=market)
             await strategy_repo.save(strategy)
             await session.commit()

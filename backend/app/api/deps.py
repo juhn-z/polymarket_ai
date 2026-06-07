@@ -109,7 +109,7 @@ def get_strategy_generator(
     # for sizing math — the Trade Executor will pull the live balance when it
     # actually withdraws from the vault.
     from decimal import Decimal
-    return StrategyGenerator(vault_balance=Decimal("100000"))
+    return StrategyGenerator(vault_balance=Decimal("100000"), min_edge=settings.min_edge)
 
 
 def get_market_scanner(

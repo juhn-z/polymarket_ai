@@ -24,7 +24,7 @@ from app.domain.markets import Market
 from app.domain.predictions import Prediction
 from app.domain.strategies import Strategy
 
-MIN_EDGE = Decimal("0.25")
+MIN_EDGE = Decimal("0.25")                       # PRD §3.4 default; env-overridable for demo
 MIN_CONFIDENCE = Decimal("0.6")
 DEFAULT_MAX_POSITION_PCT = Decimal("0.10")       # cap: 10% of vault per trade
 DEFAULT_TAKE_PROFIT_FACTOR = Decimal("0.7")
@@ -40,12 +40,14 @@ class StrategyGenerator:
         self,
         vault_balance: Decimal,
         *,
+        min_edge: Decimal = MIN_EDGE,
         max_position_pct: Decimal = DEFAULT_MAX_POSITION_PCT,
         take_profit_factor: Decimal = DEFAULT_TAKE_PROFIT_FACTOR,
         stop_loss_factor: Decimal = DEFAULT_STOP_LOSS_FACTOR,
         kelly_multiplier: Decimal = DEFAULT_KELLY_MULTIPLIER,
     ) -> None:
         self._vault_balance = vault_balance
+        self._min_edge = min_edge
         self._max_position_pct = max_position_pct
         self._tp_factor = take_profit_factor
         self._sl_factor = stop_loss_factor
@@ -59,10 +61,10 @@ class StrategyGenerator:
         abs_edge = abs(edge)
 
         # Gate 1: edge magnitude
-        if abs_edge < MIN_EDGE:
+        if abs_edge < self._min_edge:
             return _skip(
                 prediction, market, edge,
-                reason=f"Edge {abs_edge:.1%} < required {MIN_EDGE:.0%}",
+                reason=f"Edge {abs_edge:.1%} < required {self._min_edge:.0%}",
             )
 
         # Gate 2: confidence

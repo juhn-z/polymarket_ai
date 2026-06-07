@@ -1,6 +1,7 @@
 """Application configuration loaded from environment / .env."""
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,6 +34,11 @@ class Settings(BaseSettings):
     # OpenAI-compatible base URL. Override to use a proxy such as AIHubMix
     # (https://aihubmix.com/v1) without touching the adapter code.
     openai_base_url: str = "https://api.openai.com/v1"
+
+    # Trade gate (PRD §3.4 = 0.25). Env-overridable so demos can run at a
+    # lower threshold reflecting what the blind/decisive prompt naturally
+    # produces; keep 0.25 in production.
+    min_edge: Decimal = Decimal("0.25")
 
     polygon_rpc_url: str = ""
     admin_private_key: str = ""
